@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, SetStateAction, Key } from "react"
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react"
 
 export default function DailyDigest() {
@@ -16,12 +16,12 @@ export default function DailyDigest() {
   const [activeTab, setActiveTab] = useState("ID")
 
   // Get date in YYYY-MM-DD format
-  const formatDateForAPI = (date) => {
+  const formatDateForAPI = (date: Date) => {
     return date.toISOString().split("T")[0]
   }
 
   // Format date for display
-  const formatDateForDisplay = (date) => {
+  const formatDateForDisplay = (date: Date) => {
     return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
@@ -56,8 +56,8 @@ export default function DailyDigest() {
   const getAvailableCountries = () => {
     if (!digest || !digest[0]) return []
 
-    const countries = []
-    digest[0].forEach((category) => {
+    const countries: string[] = []
+    digest[0].forEach((category: {}) => {
       Object.keys(category).forEach((countryCode) => {
         if (!countries.includes(countryCode)) {
           countries.push(countryCode)
@@ -68,20 +68,20 @@ export default function DailyDigest() {
   }
 
   // Get country display name
-  const getCountryDisplayName = (countryCode) => {
+  const getCountryDisplayName = (countryCode: string) => {
     const countryNames = {
-      ID: "Indonesia",
-      US: "United States",
+      ID: "🇮🇩 Indonesia",
+      US: "🇺🇸 United States",
     }
     return countryNames[countryCode] || countryCode
   }
 
   // Get articles for a specific country
-  const getArticlesForCountry = (countryCode) => {
+  const getArticlesForCountry = (countryCode: string) => {
     if (!digest || !digest[0]) return []
 
-    const articles = []
-    digest[0].forEach((category) => {
+    const articles: any[] = []
+    digest[0].forEach((category: { [x: string]: any }) => {
       if (category[countryCode]) {
         articles.push(...category[countryCode])
       }
@@ -116,9 +116,9 @@ export default function DailyDigest() {
       setDigest(data)
 
       // Set active tab to first available country
-      const availableCountries = []
+      const availableCountries: SetStateAction<string>[] = []
       if (data && data[0]) {
-        data[0].forEach((category) => {
+        data[0].forEach((category: {}) => {
           Object.keys(category).forEach((countryCode) => {
             if (!availableCountries.includes(countryCode)) {
               availableCountries.push(countryCode)
@@ -259,7 +259,7 @@ export default function DailyDigest() {
                   {item.links && item.links.length > 0 && (
                     <div className="mt-2">
                       <div className="flex flex-wrap gap-2">
-                        {item.links.map((link, linkIndex) => (
+                        {item.links.map((link: string | undefined, linkIndex: Key | null | undefined) => (
                           <a
                             key={linkIndex}
                             href={link}
