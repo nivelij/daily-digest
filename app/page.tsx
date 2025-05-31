@@ -317,7 +317,7 @@ export default function DailyDigest() {
       </main>
 
       <footer className="py-4 px-6 text-center text-xs text-gray-500 dark:text-gray-400">
-        <p>© {new Date().getFullYear()} Daily Digest App</p>
+        <p>© {new Date().getFullYear()} Hans Kristanto</p>
       </footer>
     </div>
   )
