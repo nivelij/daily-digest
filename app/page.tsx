@@ -155,7 +155,7 @@ export default function DailyDigest() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 shadow-md p-4">
-        <h1 className="text-xl font-bold text-center text-gray-800 dark:text-white mb-2">Daily Digest</h1>
+        <h1 className="text-xl font-bold text-center text-gray-800 dark:text-white mb-2">Digest: Your Daily Summary</h1>
 
         {/* Date navigation */}
         <div className="flex items-center justify-center gap-4">

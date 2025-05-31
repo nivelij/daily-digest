@@ -6,7 +6,7 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Daily Digest",
+  title: "Digest: Your Daily Summary",
   description: "Your daily news digest from Indonesia and US markets",
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
   icons: {
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Daily Digest",
+    title: "Digest: Your Daily Summary",
   },
 }
 
