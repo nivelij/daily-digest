@@ -3,10 +3,24 @@
 import { useState, useEffect, SetStateAction, Key } from "react"
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react"
 
+// 1. Define Interfaces/Types for your data structure
+interface Article {
+  subject: string;
+  summary: string;
+  links?: string[];
+}
+
+// Represents an object like: { "ID": Article[], "US": Article[] }
+type ArticlesByCountry = Record<string, Article[]>;
+
+// Digest data structure: An array containing a single element,
+// which is an array of ArticlesByCountry objects. e.g., [ [ { "ID": [...] }, { "US": [...] } ] ]
+type DigestDataType = [ArticlesByCountry[]];
+
 export default function DailyDigest() {
-  const [digest, setDigest] = useState(null)
+  const [digest, setDigest] = useState<DigestDataType | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [currentDate, setCurrentDate] = useState(() => {
     // Initialize with yesterday's date
     const date = new Date()
@@ -57,7 +71,7 @@ export default function DailyDigest() {
     if (!digest || !digest[0]) return []
 
     const countries: string[] = []
-    digest[0].forEach((category: {}) => {
+    digest[0].forEach((category: ArticlesByCountry) => {
       Object.keys(category).forEach((countryCode) => {
         if (!countries.includes(countryCode)) {
           countries.push(countryCode)
@@ -69,20 +83,20 @@ export default function DailyDigest() {
 
   // Get country display name
   const getCountryDisplayName = (countryCode: string) => {
-    const countryNames = {
+    const countryNames: Record<string, string> = {
       ID: "🇮🇩 Indonesia",
       US: "🇺🇸 United States",
-    }
-    return countryNames[countryCode] || countryCode
+    };
+    return countryNames[countryCode] || countryCode;
   }
 
   // Get articles for a specific country
   const getArticlesForCountry = (countryCode: string) => {
     if (!digest || !digest[0]) return []
 
-    const articles: any[] = []
-    digest[0].forEach((category: { [x: string]: any }) => {
-      if (category[countryCode]) {
+    const articles: Article[] = []
+    digest[0].forEach((category: ArticlesByCountry) => {
+      if (category[countryCode] && category[countryCode].length > 0) {
         articles.push(...category[countryCode])
       }
     })
@@ -116,10 +130,10 @@ export default function DailyDigest() {
       setDigest(data)
 
       // Set active tab to first available country
-      const availableCountries: SetStateAction<string>[] = []
+      const availableCountriesList: string[] = [] // Renamed to avoid conflict and corrected type
       if (data && data[0]) {
-        data[0].forEach((category: {}) => {
-          Object.keys(category).forEach((countryCode) => {
+        (data[0] as ArticlesByCountry[]).forEach((category: ArticlesByCountry) => { // Added type assertion for safety
+          Object.keys(category).forEach((countryCode: string) => {
             if (!availableCountries.includes(countryCode)) {
               availableCountries.push(countryCode)
             }
@@ -129,15 +143,21 @@ export default function DailyDigest() {
           setActiveTab(availableCountries[0])
         }
       }
-    } catch (err) {
+    } catch (err: unknown) { // Explicitly type err as unknown
       console.error("Error fetching digest:", err)
 
-      if (err.name === "AbortError") {
-        setError("Request timed out. Please check your internet connection and try again.")
-      } else if (err.message.includes("Failed to fetch")) {
-        setError("Network error. Please check your internet connection.")
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Request timed out. Please check your internet connection and try again.")
+        } else if (err.message.includes("Failed to fetch")) {
+          // This specific check might be brittle if the browser's "Failed to fetch" message changes.
+          // Consider checking for err instanceof TypeError if that's what network errors typically are.
+          setError("Network error. Please check your internet connection.")
+        } else {
+          setError(`Failed to load digest: ${err.message}`)
+        }
       } else {
-        setError(`Failed to load digest: ${err.message}`)
+        setError("An unexpected error occurred. Please try again.")
       }
     } finally {
       setLoading(false)
@@ -150,7 +170,7 @@ export default function DailyDigest() {
   }, [currentDate])
 
   const availableCountries = getAvailableCountries()
-  const currentArticles = getArticlesForCountry(activeTab)
+  const currentArticles: Article[] = getArticlesForCountry(activeTab)
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -247,7 +267,7 @@ export default function DailyDigest() {
         {/* Content - Tab view */}
         {!loading && !error && digest && availableCountries.length > 0 && (
           <div className="space-y-4">
-            {currentArticles.length > 0 ? (
+            {currentArticles && currentArticles.length > 0 ? (
               currentArticles.map((item, itemIndex) => (
                 <div
                   key={itemIndex}
@@ -258,19 +278,19 @@ export default function DailyDigest() {
 
                   {item.links && item.links.length > 0 && (
                     <div className="mt-2">
-                      <div className="flex flex-wrap gap-2">
-                        {item.links.map((link: string | undefined, linkIndex: Key | null | undefined) => (
+                      <div className="flex flex-wrap gap-3">
+                        {item.links.map((link: string, linkIndex: number) => (
                           <a
                             key={linkIndex}
-                            href={link}
+                            href={link} // link is now guaranteed to be a string
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                          >
+                          > 
                             <ExternalLink className="h-3 w-3 mr-1" />
                             Source {linkIndex + 1}
                           </a>
-                        ))}
+                        ))} 
                       </div>
                     </div>
                   )}

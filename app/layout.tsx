@@ -18,6 +18,7 @@ export const metadata: Metadata = {
     shortcut: "/icon.png",
   },
   manifest: "/manifest.json",
+  robots: "noindex, nofollow",
   themeColor: "#1e40af",
   appleWebApp: {
     capable: true,
