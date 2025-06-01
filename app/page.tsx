@@ -3,6 +3,11 @@
 import { useState, useEffect, SetStateAction, Key } from "react"
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react"
 
+// Define the limit date components for disabling "previous day" navigation
+const PREVIOUS_NAVIGATION_LIMIT_YEAR = 2025;
+const PREVIOUS_NAVIGATION_LIMIT_MONTH = 4; // 0-indexed for May (0 = January, 4 = May)
+const PREVIOUS_NAVIGATION_LIMIT_DAY = 28;
+
 // 1. Define Interfaces/Types for your data structure
 interface Article {
   subject: string;
@@ -50,8 +55,21 @@ export default function DailyDigest() {
     return formatDateForAPI(currentDate) === formatDateForAPI(yesterday)
   }
 
+  // Check if current date is the specific limit date (e.g., 28.05.2025)
+  // Disables going to a day *before* this limit date.
+  const isPreviousNavigationDisabled = () => {
+    return (
+      currentDate.getFullYear() === PREVIOUS_NAVIGATION_LIMIT_YEAR &&
+      currentDate.getMonth() === PREVIOUS_NAVIGATION_LIMIT_MONTH &&
+      currentDate.getDate() === PREVIOUS_NAVIGATION_LIMIT_DAY
+    );
+  };
+
   // Navigate to previous day
   const goToPreviousDay = () => {
+    if (isPreviousNavigationDisabled()) {
+      return; // Do nothing if navigation to previous day is disabled
+    }
     const previousDay = new Date(currentDate)
     previousDay.setDate(previousDay.getDate() - 1)
     setCurrentDate(previousDay)
@@ -181,10 +199,15 @@ export default function DailyDigest() {
         <div className="flex items-center justify-center gap-4">
           <button
             onClick={goToPreviousDay}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            disabled={isPreviousNavigationDisabled()}
+            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Previous day"
           >
-            <ChevronLeft className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+            <ChevronLeft className={`h-5 w-5 ${
+              isPreviousNavigationDisabled()
+                ? 'text-gray-400 dark:text-gray-600' // Muted colors for disabled icon
+                : 'text-gray-600 dark:text-gray-400' // Default icon colors
+            }`} />
           </button>
 
           <p className="text-sm text-center text-gray-500 dark:text-gray-400 min-w-0 flex-1">
