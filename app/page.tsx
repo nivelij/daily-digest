@@ -101,9 +101,10 @@ export default function DailyDigest() {
 
   const getCategoryDisplayName = (categoryCode: string) => {
     const categoryName: Record<string, string> = {
-      ID: "🇮🇩 Indonesia",
-      US: "🇺🇸 United States",
+      ID: "🇮🇩 ID Stock",
+      US: "🇺🇸 US Stock",
       XAUUSD: "🧈 Gold",
+      DXY: "💰 DXY",
     };
     return categoryName[categoryCode] || categoryCode;
   }
