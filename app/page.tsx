@@ -99,13 +99,13 @@ export default function DailyDigest() {
     return countries
   }
 
-  // Get country display name
-  const getCountryDisplayName = (countryCode: string) => {
-    const countryNames: Record<string, string> = {
+  const getCategoryDisplayName = (categoryCode: string) => {
+    const categoryName: Record<string, string> = {
       ID: "🇮🇩 Indonesia",
       US: "🇺🇸 United States",
+      XAUUSD: "🧈 Gold",
     };
-    return countryNames[countryCode] || countryCode;
+    return categoryName[categoryCode] || categoryCode;
   }
 
   // Get articles for a specific country
@@ -243,7 +243,7 @@ export default function DailyDigest() {
                       : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
                   }`}
                 >
-                  {getCountryDisplayName(countryCode)}
+                  {getCategoryDisplayName(countryCode)}
                 </button>
               ))}
             </div>
@@ -323,7 +323,7 @@ export default function DailyDigest() {
               <div className="text-center py-12">
                 <FileText className="h-12 w-12 mx-auto text-gray-400" />
                 <p className="mt-4 text-gray-600 dark:text-gray-400">
-                  No articles available for {getCountryDisplayName(activeTab)} on this date.
+                  No articles available for {getCategoryDisplayName(activeTab)} on this date.
                 </p>
               </div>
             )}
