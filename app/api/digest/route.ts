@@ -44,18 +44,25 @@ export async function GET(request: NextRequest) {
         "Access-Control-Allow-Headers": "Content-Type",
       },
     })
-  } catch (error) {
-    console.error("API route error:", error)
+  } catch (err: unknown) { // Explicitly type 'err' as unknown for clarity
+    console.error("API route error:", err)
 
-    if (error.name === "TimeoutError") {
-      return NextResponse.json(
-        { error: "Request timeout - the external API took too long to respond" },
-        { status: 504 },
-      )
-    }
+    // Type guard to ensure 'err' is an Error instance
+    if (err instanceof Error) {
+      // AbortSignal.timeout throws a DOMException with name 'TimeoutError'.
+      // DOMException inherits from Error, so this check is valid.
+      if (err.name === "TimeoutError") {
+        return NextResponse.json(
+          { error: "Request timeout - the external API took too long to respond" },
+          { status: 504 },
+        )
+      }
 
-    if (error.name === "TypeError" && error.message.includes("fetch")) {
-      return NextResponse.json({ error: "Network error - unable to reach the external API" }, { status: 503 })
+      // Check for TypeError related to fetch (e.g., network issues).
+      // If 'err' is an instance of TypeError, its 'name' property will be "TypeError".
+      if (err.name === "TypeError" && err.message.includes("fetch")) {
+        return NextResponse.json({ error: "Network error - unable to reach the external API" }, { status: 503 })
+      }
     }
 
     return NextResponse.json({ error: "Internal server error while fetching digest" }, { status: 500 })
