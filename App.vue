@@ -137,7 +137,7 @@ const fetchDigest = async () => {
   
   try {
     const yesterdayDate = getYesterdayDate()
-    const response = await fetch(`https://x7lreie3ib.execute-api.eu-central-1.amazonaws.com/live/daily_digest?date=${yesterdayDate}`)
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_ENDPOINT_URL}/daily_digest?date=${yesterdayDate}`)
     
     if (!response.ok) {
       throw new Error(`Failed to fetch digest: ${response.status} ${response.statusText}`)

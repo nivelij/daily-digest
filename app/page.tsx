@@ -1,13 +1,9 @@
 "use client"
 
-import { useState, useEffect, SetStateAction, Key } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react"
 
-// Define the limit date components for disabling "previous day" navigation
-const PREVIOUS_NAVIGATION_LIMIT_YEAR = 2025;
-const PREVIOUS_NAVIGATION_LIMIT_MONTH = 4; // 0-indexed for May (0 = January, 4 = May)
-const PREVIOUS_NAVIGATION_LIMIT_DAY = 28;
-
+const AVAILABLE_DATES_ENDPOINT = `${process.env.NEXT_PUBLIC_BACKEND_ENDPOINT_URL}/dates`;
 // 1. Define Interfaces/Types for your data structure
 interface Article {
   subject: string;
@@ -23,67 +19,74 @@ type ArticlesByCountry = Record<string, Article[]>;
 type DigestDataType = [ArticlesByCountry[]];
 
 export default function DailyDigest() {
+  // State for available dates
+  const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [loadingDates, setLoadingDates] = useState(true)
+  const [datesError, setDatesError] = useState<string | null>(null)
+
+  // State for digest data
   const [digest, setDigest] = useState<DigestDataType | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [currentDate, setCurrentDate] = useState(() => {
-    // Initialize with yesterday's date
-    const date = new Date()
-    date.setDate(date.getDate() - 1)
-    return date
-  })
+  const [loadingDigest, setLoadingDigest] = useState(false) // Initially false, true when fetching digest
+  const [digestError, setDigestError] = useState<string | null>(null)
+
+  // Current selected date (UTC Date object)
+  const [currentDate, setCurrentDate] = useState<Date | null>(null)
   const [activeTab, setActiveTab] = useState("ID")
 
-  // Get date in YYYY-MM-DD format
+  // Get date in YYYY-MM-DD format from a UTC Date object
   const formatDateForAPI = (date: Date) => {
-    return date.toISOString().split("T")[0]
+    const year = date.getUTCFullYear();
+    const month = ('0' + (date.getUTCMonth() + 1)).slice(-2);
+    const day = ('0' + date.getUTCDate()).slice(-2);
+    return `${year}-${month}-${day}`;
   }
 
-  // Format date for display
+  // Parse YYYY-MM-DD string to a UTC Date object
+  const parseAPIDateStringToUTCDate = (dateString: string): Date => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+  };
+
+  // Format date for display (shows date in user's local timezone)
   const formatDateForDisplay = (date: Date) => {
     return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
-    })
-  }
+    });
+  };
 
-  // Check if current date is yesterday (today - 1)
-  const isYesterday = () => {
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    return formatDateForAPI(currentDate) === formatDateForAPI(yesterday)
-  }
+  const isPreviousDayNavigationDisabled = () => {
+    if (!currentDate || availableDates.length === 0) return true;
+    const currentDateStr = formatDateForAPI(currentDate);
+    return currentDateStr === availableDates[0]; // Assumes availableDates is sorted ascending
+  };
 
-  // Check if current date is the specific limit date (e.g., 28.05.2025)
-  // Disables going to a day *before* this limit date.
-  const isPreviousNavigationDisabled = () => {
-    return (
-      currentDate.getFullYear() === PREVIOUS_NAVIGATION_LIMIT_YEAR &&
-      currentDate.getMonth() === PREVIOUS_NAVIGATION_LIMIT_MONTH &&
-      currentDate.getDate() === PREVIOUS_NAVIGATION_LIMIT_DAY
-    );
+  const isNextDayNavigationDisabled = () => {
+    if (!currentDate || availableDates.length === 0) return true;
+    const currentDateStr = formatDateForAPI(currentDate);
+    return currentDateStr === availableDates[availableDates.length - 1]; // Assumes availableDates is sorted ascending
   };
 
   // Navigate to previous day
   const goToPreviousDay = () => {
-    if (isPreviousNavigationDisabled()) {
-      return; // Do nothing if navigation to previous day is disabled
+    if (!currentDate || isPreviousDayNavigationDisabled()) return;
+    const currentDateStr = formatDateForAPI(currentDate);
+    const currentIndex = availableDates.indexOf(currentDateStr);
+    if (currentIndex > 0) {
+      setCurrentDate(parseAPIDateStringToUTCDate(availableDates[currentIndex - 1]));
     }
-    const previousDay = new Date(currentDate)
-    previousDay.setDate(previousDay.getDate() - 1)
-    setCurrentDate(previousDay)
   }
 
   // Navigate to next day
   const goToNextDay = () => {
-    if (!isYesterday()) {
-      const nextDay = new Date(currentDate)
-      nextDay.setDate(nextDay.getDate() + 1)
-      setCurrentDate(nextDay)
+    if (!currentDate || isNextDayNavigationDisabled()) return;
+    const currentDateStr = formatDateForAPI(currentDate);
+    const currentIndex = availableDates.indexOf(currentDateStr);
+    if (currentIndex < availableDates.length - 1) {
+      setCurrentDate(parseAPIDateStringToUTCDate(availableDates[currentIndex + 1]));
     }
   }
-
   // Get available countries from digest data
   const getAvailableCountries = () => {
     if (!digest || !digest[0]) return []
@@ -122,10 +125,10 @@ export default function DailyDigest() {
     return articles
   }
 
-  // Fetch digest data from our API route
-  const fetchDigest = async (date = currentDate) => {
-    setLoading(true)
-    setError(null)
+  // Fetch digest data
+  const fetchDigest = useCallback(async (date: Date) => {
+    setLoadingDigest(true)
+    setDigestError(null)
 
     try {
       const dateString = formatDateForAPI(date)
@@ -147,49 +150,131 @@ export default function DailyDigest() {
 
       const data = await response.json()
       setDigest(data)
-
-      // Set active tab to first available country
-      const availableCountriesList: string[] = [] // Renamed to avoid conflict and corrected type
-      if (data && data[0]) {
-        (data[0] as ArticlesByCountry[]).forEach((category: ArticlesByCountry) => { // Added type assertion for safety
-          Object.keys(category).forEach((countryCode: string) => {
-            if (!availableCountries.includes(countryCode)) {
-              availableCountries.push(countryCode)
-            }
-          })
-        })
-        if (availableCountries.length > 0 && !availableCountries.includes(activeTab)) {
-          setActiveTab(availableCountries[0])
-        }
-      }
     } catch (err: unknown) { // Explicitly type err as unknown
       console.error("Error fetching digest:", err)
 
       if (err instanceof Error) {
         if (err.name === "AbortError") {
-          setError("Request timed out. Please check your internet connection and try again.")
+          setDigestError("Request timed out. Please check your internet connection and try again.")
         } else if (err.message.includes("Failed to fetch")) {
-          // This specific check might be brittle if the browser's "Failed to fetch" message changes.
-          // Consider checking for err instanceof TypeError if that's what network errors typically are.
-          setError("Network error. Please check your internet connection.")
+          setDigestError("Network error. Please check your internet connection.")
         } else {
-          setError(`Failed to load digest: ${err.message}`)
+          setDigestError(`Failed to load digest: ${err.message}`)
         }
       } else {
-        setError("An unexpected error occurred. Please try again.")
+        setDigestError("An unexpected error occurred. Please try again.")
       }
     } finally {
-      setLoading(false)
+      setLoadingDigest(false)
     }
-  }
+  }, [activeTab]) // formatDateForAPI is stable, setters are stable. activeTab was part of old logic, removing.
 
-  // Fetch digest when current date changes
+  // Fetch available dates on component mount
+  const fetchAvailableDates = useCallback(async () => {
+    setLoadingDates(true);
+    setDatesError(null);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+      const response = await fetch(AVAILABLE_DATES_ENDPOINT, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to fetch available dates: ${response.status} ${response.statusText}`);
+      }
+      const dates: string[] = await response.json();
+      if (!Array.isArray(dates) || !dates.every(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))) {
+        throw new Error("Invalid date format received from API.");
+      }
+
+      dates.sort((a, b) => a.localeCompare(b)); // Sort ascending (oldest to newest)
+      setAvailableDates(dates);
+
+      if (dates.length > 0) {
+        setCurrentDate(parseAPIDateStringToUTCDate(dates[dates.length - 1])); // Set to latest date
+      } else {
+        setDatesError("No dates available from the source."); // Or handle as a non-error empty state
+      }
+    } catch (err) {
+      console.error("Error fetching available dates:", err);
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setDatesError("Request for available dates timed out.");
+        } else {
+          setDatesError(`Failed to load available dates: ${err.message}`);
+        }
+      } else {
+        setDatesError("An unexpected error occurred while fetching dates.");
+      }
+    } finally {
+      setLoadingDates(false);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchDigest(currentDate)
+    fetchAvailableDates();
+  }, [fetchAvailableDates]);
+
+  // Fetch digest when current date changes (and is not null)
+  useEffect(() => {
+    if (currentDate) {
+      fetchDigest(currentDate);
+    } else {
+      // If currentDate is null (e.g. no available dates), clear digest
+      setDigest(null);
+      setLoadingDigest(false);
+    }
   }, [currentDate])
+
+  // Effect to update activeTab when digest data changes or if activeTab becomes invalid
+  useEffect(() => {
+    const countries = getAvailableCountries(); // Depends on `digest`
+    if (countries.length > 0) {
+      if (!countries.includes(activeTab)) {
+        setActiveTab(countries[0]);
+      }
+    }
+    // If countries.length is 0, activeTab remains, but UI will show "no articles"
+  }, [digest, activeTab]); // getAvailableCountries is not stable, so digest is the key dependency.
 
   const availableCountries = getAvailableCountries()
   const currentArticles: Article[] = getArticlesForCountry(activeTab)
+
+  if (loadingDates) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-4 border-t-blue-500 border-gray-200 rounded-full animate-spin"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading available dates...</p>
+      </div>
+    );
+  }
+
+  if (datesError) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center p-4 text-center">
+        <AlertTriangle className="h-12 w-12 text-red-500 mb-4" />
+        <p className="text-red-700 dark:text-red-400 font-medium mb-2">Unable to load schedule</p>
+        <p className="text-red-600 dark:text-red-300 text-sm mb-4">{datesError}</p>
+        <button
+          onClick={fetchAvailableDates}
+          className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-sm"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  if (availableDates.length === 0 || !currentDate) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col items-center justify-center p-4 text-center">
+        <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <p className="mt-4 text-gray-600 dark:text-gray-400">No dates available to display digest for.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -200,22 +285,22 @@ export default function DailyDigest() {
         <div className="flex items-center justify-center gap-4">
           <button
             onClick={goToPreviousDay}
-            disabled={isPreviousNavigationDisabled()}
+            disabled={isPreviousDayNavigationDisabled()}
             className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Previous day"
           >
             <ChevronLeft className={`h-5 w-5 ${
-              isPreviousNavigationDisabled()
+              isPreviousDayNavigationDisabled()
                 ? 'text-gray-400 dark:text-gray-600' // Muted colors for disabled icon
                 : 'text-gray-600 dark:text-gray-400' // Default icon colors
             }`} />
           </button>
 
           <p className="text-sm text-center text-gray-500 dark:text-gray-400 min-w-0 flex-1">
-            {formatDateForDisplay(currentDate)}
+            {currentDate ? formatDateForDisplay(currentDate) : "Loading date..."}
           </p>
 
-          {!isYesterday() && (
+          {currentDate && !isNextDayNavigationDisabled() ? (
             <button
               onClick={goToNextDay}
               className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -223,15 +308,13 @@ export default function DailyDigest() {
             >
               <ChevronRight className="h-5 w-5 text-gray-600 dark:text-gray-400" />
             </button>
-          )}
-
-          {isYesterday() && (
+          ) : (
             <div className="w-9 h-9" /> // Placeholder to maintain spacing
           )}
         </div>
 
         {/* Country tabs */}
-        {!loading && !error && availableCountries.length > 0 && (
+        {!loadingDigest && !digestError && availableCountries.length > 0 && (
           <div className="flex justify-center mt-4">
             <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
               {availableCountries.map((countryCode) => (
@@ -254,7 +337,7 @@ export default function DailyDigest() {
 
       <main className="container mx-auto px-4 py-6 max-w-md">
         {/* Loading state */}
-        {loading && (
+        {loadingDigest && (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="w-12 h-12 border-4 border-t-blue-500 border-gray-200 rounded-full animate-spin"></div>
             <p className="mt-4 text-gray-600 dark:text-gray-400">Loading digest...</p>
@@ -262,18 +345,18 @@ export default function DailyDigest() {
         )}
 
         {/* Error state */}
-        {!loading && error && (
+        {!loadingDigest && digestError && (
           <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-md">
             <div className="flex items-center">
               <AlertTriangle className="h-5 w-5 text-red-500 mr-2" />
               <div>
                 <p className="text-red-700 dark:text-red-400 font-medium">Unable to load digest</p>
-                <p className="text-red-600 dark:text-red-300 text-sm mt-1">{error}</p>
+                <p className="text-red-600 dark:text-red-300 text-sm mt-1">{digestError}</p>
               </div>
             </div>
             <div className="mt-4 flex gap-2">
               <button
-                onClick={() => fetchDigest(currentDate)}
+                onClick={() => currentDate && fetchDigest(currentDate)}
                 className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-sm"
               >
                 Try Again
@@ -289,7 +372,7 @@ export default function DailyDigest() {
         )}
 
         {/* Content - Tab view */}
-        {!loading && !error && digest && availableCountries.length > 0 && (
+        {!loadingDigest && !digestError && digest && availableCountries.length > 0 && (
           <div className="space-y-4">
             {currentArticles && currentArticles.length > 0 ? (
               currentArticles.map((item, itemIndex) => (
@@ -332,7 +415,7 @@ export default function DailyDigest() {
         )}
 
         {/* Empty state */}
-        {!loading && !error && digest && availableCountries.length === 0 && (
+        {!loadingDigest && !digestError && digest && availableCountries.length === 0 && (
           <div className="text-center py-12">
             <FileText className="h-12 w-12 mx-auto text-gray-400" />
             <p className="mt-4 text-gray-600 dark:text-gray-400">No digest available for this date.</p>

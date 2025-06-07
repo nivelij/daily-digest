@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid date format. Use YYYY-MM-DD" }, { status: 400 })
     }
 
-    const apiUrl = `https://x7lreie3ib.execute-api.eu-central-1.amazonaws.com/live/daily_digest?date=${date}`
+    const apiUrl = `${process.env.NEXT_PUBLIC_BACKEND_ENDPOINT_URL}/daily_digest?date=${date}`
 
     const response = await fetch(apiUrl, {
       headers: {
