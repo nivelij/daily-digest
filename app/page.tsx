@@ -28,6 +28,7 @@ export default function DailyDigest() {
   // Current selected date (UTC Date object)
   const [currentDate, setCurrentDate] = useState<Date | null>(null)
   const [activeTab, setActiveTab] = useState("ID")
+  const [digestCache, setDigestCache] = useState<Record<string, DigestDataType>>({});
 
   // Refs for tab animation
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -105,8 +106,8 @@ export default function DailyDigest() {
 
   const getCategoryDisplayName = (categoryCode: string) => {
     const categoryName: Record<string, string> = {
-      ID: "🇮🇩 ID Stock",
-      US: "🇺🇸 US Stock",
+      ID: "🇮🇩 IHSG",
+      US: "🇺🇸 Stocks",
       XAUUSD: "🧈 Gold",
       DXY: "💰 DXY",
     };
@@ -128,15 +129,26 @@ export default function DailyDigest() {
 
   // Fetch digest data
   const fetchDigest = useCallback(async (date: Date) => {
+    const dateString = formatDateForAPI(date);
+
+    // 1. Check cache first
+    if (digestCache[dateString]) {
+      setDigest(digestCache[dateString]);
+      setDigestError(null); // Clear any previous error for this date
+      setLoadingDigest(false); // Ensure loading is false if served from cache
+      return; // Exit early, data served from cache
+    }
+
+    // 2. If not in cache, proceed with fetching
     setLoadingDigest(true)
     setDigestError(null)
 
-    try {
-      const dateString = formatDateForAPI(date)
+    // Declare controller outside the try block to be accessible in catch
+    const controller = new AbortController()
 
+    try {
       // Add timeout to the client request as well
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+      const timeoutId = setTimeout(() => controller.abort("timeout"), 15000); // 15 second timeout, pass reason
 
       const response = await fetch(`/api/digest?date=${dateString}`, {
         signal: controller.signal,
@@ -150,12 +162,17 @@ export default function DailyDigest() {
       }
 
       const data = await response.json()
-      setDigest(data)
+      setDigest(data);
+      // 3. Store in cache upon successful fetch
+      setDigestCache(prevCache => ({
+        ...prevCache,
+        [dateString]: data,
+      }));
     } catch (err: unknown) { // Explicitly type err as unknown
       console.error("Error fetching digest:", err)
 
       if (err instanceof Error) {
-        if (err.name === "AbortError") {
+        if (err.name === "AbortError" || (controller.signal.aborted && controller.signal.reason === "timeout")) {
           setDigestError("Request timed out. Please check your internet connection and try again.")
         } else if (err.message.includes("Failed to fetch")) {
           setDigestError("Network error. Please check your internet connection.")
@@ -168,15 +185,23 @@ export default function DailyDigest() {
     } finally {
       setLoadingDigest(false)
     }
-  }, []) // formatDateForAPI is stable, setters are stable.
+  }, [digestCache, formatDateForAPI]); // Added digestCache and formatDateForAPI
+  // setDigest, setDigestError, setLoadingDigest, setDigestCache are stable setters from useState
+  // formatDateForAPI is defined in component scope but doesn't depend on props/state, so it's stable.
+  // Including it in dependencies for explicitness and to satisfy linters if they complain.
+
+
+
 
   // Fetch available dates on component mount
   const fetchAvailableDates = useCallback(async () => {
     setLoadingDates(true);
     setDatesError(null);
+    // Declare controller outside the try block to be accessible in catch
+    const controller = new AbortController();
+
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      const timeoutId = setTimeout(() => controller.abort("timeout"), 15000); // 15 second timeout, pass reason
 
       const response = await fetch(AVAILABLE_DATES_ENDPOINT, { signal: controller.signal });
       clearTimeout(timeoutId);
@@ -201,7 +226,7 @@ export default function DailyDigest() {
     } catch (err) {
       console.error("Error fetching available dates:", err);
       if (err instanceof Error) {
-        if (err.name === "AbortError") {
+        if (err.name === "AbortError" || (controller.signal.aborted && controller.signal.reason === "timeout")) {
           setDatesError("Request for available dates timed out.");
         } else {
           setDatesError(`Failed to load available dates: ${err.message}`);
@@ -226,10 +251,11 @@ export default function DailyDigest() {
       // If currentDate is null (e.g. no available dates), clear digest
       setDigest(null);
       setLoadingDigest(false);
+      setDigestError(null); // Also clear any digest error
     }
-  }, [currentDate])
+  }, [currentDate, fetchDigest]); // Added fetchDigest as a dependency
 
-  // Effect to update activeTab when digest data changes or if activeTab becomes invalid
+  // Effect to update activeTab when digest data changes (e.g. from cache or new fetch) or if activeTab becomes invalid
   useEffect(() => {
     const countries = getAvailableCountries(); // Depends on `digest`
     if (countries.length > 0) {
