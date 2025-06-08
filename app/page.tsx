@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react"
 
 const AVAILABLE_DATES_ENDPOINT = `${process.env.NEXT_PUBLIC_BACKEND_ENDPOINT_URL}/dates`;
@@ -11,11 +11,7 @@ interface Article {
   links?: string[];
 }
 
-// Represents an object like: { "ID": Article[], "US": Article[] }
 type ArticlesByCountry = Record<string, Article[]>;
-
-// Digest data structure: An array containing a single element,
-// which is an array of ArticlesByCountry objects. e.g., [ [ { "ID": [...] }, { "US": [...] } ] ]
 type DigestDataType = [ArticlesByCountry[]];
 
 export default function DailyDigest() {
@@ -32,6 +28,11 @@ export default function DailyDigest() {
   // Current selected date (UTC Date object)
   const [currentDate, setCurrentDate] = useState<Date | null>(null)
   const [activeTab, setActiveTab] = useState("ID")
+
+  // Refs for tab animation
+  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [sliderStyle, setSliderStyle] = useState<{ left: number; width: number; top: number; height: number } | null>(null);
 
   // Get date in YYYY-MM-DD format from a UTC Date object
   const formatDateForAPI = (date: Date) => {
@@ -167,7 +168,7 @@ export default function DailyDigest() {
     } finally {
       setLoadingDigest(false)
     }
-  }, [activeTab]) // formatDateForAPI is stable, setters are stable. activeTab was part of old logic, removing.
+  }, []) // formatDateForAPI is stable, setters are stable.
 
   // Fetch available dates on component mount
   const fetchAvailableDates = useCallback(async () => {
@@ -232,15 +233,47 @@ export default function DailyDigest() {
   useEffect(() => {
     const countries = getAvailableCountries(); // Depends on `digest`
     if (countries.length > 0) {
-      if (!countries.includes(activeTab)) {
+      if (!activeTab || !countries.includes(activeTab)) {
         setActiveTab(countries[0]);
       }
+    } else {
+      if (activeTab) { // If there was an active tab from a previous digest
+        setActiveTab(""); // Clear activeTab if no countries are available
+      }
     }
-    // If countries.length is 0, activeTab remains, but UI will show "no articles"
-  }, [digest, activeTab]); // getAvailableCountries is not stable, so digest is the key dependency.
+  }, [digest, activeTab]);
+
+  // Effect to calculate and set slider position for tab animation
+  useEffect(() => {
+    const calculateAndSetSliderStyle = () => {
+      if (activeTab && tabRefs.current[activeTab] && tabsContainerRef.current) {
+        const tabButtonNode = tabRefs.current[activeTab];
+        // const containerNode = tabsContainerRef.current; // Not strictly needed if using offsetLeft/Top
+
+        if (tabButtonNode) {
+          setSliderStyle({
+            left: tabButtonNode.offsetLeft,
+            width: tabButtonNode.offsetWidth,
+            top: tabButtonNode.offsetTop,
+            height: tabButtonNode.offsetHeight,
+          });
+        }
+      } else {
+        setSliderStyle(null);
+      }
+    };
+
+    calculateAndSetSliderStyle();
+
+    window.addEventListener('resize', calculateAndSetSliderStyle);
+    return () => {
+      window.removeEventListener('resize', calculateAndSetSliderStyle);
+    };
+  }, [activeTab, digest]); // Re-calculate when activeTab or digest (affecting availableCountries) changes
 
   const availableCountries = getAvailableCountries()
   const currentArticles: Article[] = getArticlesForCountry(activeTab)
+
 
   if (loadingDates) {
     return (
@@ -316,15 +349,30 @@ export default function DailyDigest() {
         {/* Country tabs */}
         {!loadingDigest && !digestError && availableCountries.length > 0 && (
           <div className="flex justify-center mt-4">
-            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <div ref={tabsContainerRef} className="relative flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+              {/* Slider Element */}
+              {sliderStyle && (
+                <div
+                  className="absolute bg-white dark:bg-gray-800 shadow-sm rounded-md"
+                  style={{
+                    left: `${sliderStyle.left}px`,
+                    top: `${sliderStyle.top}px`,
+                    width: `${sliderStyle.width}px`,
+                    height: `${sliderStyle.height}px`,
+                    transition: 'left 0.3s ease-in-out, width 0.3s ease-in-out, top 0.3s ease-in-out, height 0.3s ease-in-out',
+                  }}
+                />
+              )}
               {availableCountries.map((countryCode) => (
                 <button
                   key={countryCode}
+                  ref={(el) => { tabRefs.current[countryCode] = el; }}
                   onClick={() => setActiveTab(countryCode)}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  // Add `relative z-10` to ensure text is above the slider and clickable
+                  className={`relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none ${
                     activeTab === countryCode
-                      ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm"
-                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      ? "text-gray-900 dark:text-white" // Active text color
+                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-600/50"
                   }`}
                 >
                   {getCategoryDisplayName(countryCode)}
