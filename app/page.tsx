@@ -30,11 +30,6 @@ export default function DailyDigest() {
   const [activeTab, setActiveTab] = useState("ID")
   const [digestCache, setDigestCache] = useState<Record<string, DigestDataType>>({});
 
-  // Refs for tab animation
-  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const [sliderStyle, setSliderStyle] = useState<{ left: number; width: number; top: number; height: number } | null>(null);
-
   // Get date in YYYY-MM-DD format from a UTC Date object
   const formatDateForAPI = (date: Date) => {
     const year = date.getUTCFullYear();
@@ -110,6 +105,7 @@ export default function DailyDigest() {
       US: "🇺🇸 Stocks",
       XAUUSD: "🧈 Gold",
       DXY: "💰 DXY",
+      Crypto: "₿ Crypto"
     };
     return categoryName[categoryCode] || categoryCode;
   }
@@ -269,34 +265,6 @@ export default function DailyDigest() {
     }
   }, [digest, activeTab]);
 
-  // Effect to calculate and set slider position for tab animation
-  useEffect(() => {
-    const calculateAndSetSliderStyle = () => {
-      if (activeTab && tabRefs.current[activeTab] && tabsContainerRef.current) {
-        const tabButtonNode = tabRefs.current[activeTab];
-        // const containerNode = tabsContainerRef.current; // Not strictly needed if using offsetLeft/Top
-
-        if (tabButtonNode) {
-          setSliderStyle({
-            left: tabButtonNode.offsetLeft,
-            width: tabButtonNode.offsetWidth,
-            top: tabButtonNode.offsetTop,
-            height: tabButtonNode.offsetHeight,
-          });
-        }
-      } else {
-        setSliderStyle(null);
-      }
-    };
-
-    calculateAndSetSliderStyle();
-
-    window.addEventListener('resize', calculateAndSetSliderStyle);
-    return () => {
-      window.removeEventListener('resize', calculateAndSetSliderStyle);
-    };
-  }, [activeTab, digest]); // Re-calculate when activeTab or digest (affecting availableCountries) changes
-
   const availableCountries = getAvailableCountries()
   const currentArticles: Article[] = getArticlesForCountry(activeTab)
 
@@ -338,7 +306,10 @@ export default function DailyDigest() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 shadow-md p-4">
-        <h1 className="text-xl font-bold text-center text-gray-800 dark:text-white mb-2">Digest: Your Daily Summary</h1>
+        <h1 className="text-xl font-bold text-center text-gray-800 dark:text-white mb-2 flex items-center justify-center">
+          <img src="/icon.png" alt="Digest Icon" className="h-6 w-6 mr-2" />
+          <span>Digest: Daily Summary</span>
+        </h1>
 
         {/* Date navigation */}
         <div className="flex items-center justify-center gap-4">
@@ -374,31 +345,21 @@ export default function DailyDigest() {
 
         {/* Country tabs */}
         {!loadingDigest && !digestError && availableCountries.length > 0 && (
-          <div className="flex justify-center mt-4">
-            <div ref={tabsContainerRef} className="relative flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-              {/* Slider Element */}
-              {sliderStyle && (
-                <div
-                  className="absolute bg-white dark:bg-gray-800 shadow-sm rounded-md"
-                  style={{
-                    left: `${sliderStyle.left}px`,
-                    top: `${sliderStyle.top}px`,
-                    width: `${sliderStyle.width}px`,
-                    height: `${sliderStyle.height}px`,
-                    transition: 'left 0.3s ease-in-out, width 0.3s ease-in-out, top 0.3s ease-in-out, height 0.3s ease-in-out',
-                  }}
-                />
-              )}
+          <div className="mt-4 px-2 sm:px-0"> {/* Outer container for padding on small screens */}
+            <div className="flex overflow-x-auto space-x-3 py-2 whitespace-nowrap no-scrollbar">
               {availableCountries.map((countryCode) => (
                 <button
                   key={countryCode}
-                  ref={(el) => { tabRefs.current[countryCode] = el; }}
                   onClick={() => setActiveTab(countryCode)}
-                  // Add `relative z-10` to ensure text is above the slider and clickable
-                  className={`relative z-10 px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none ${
+                  style={activeTab === countryCode ? { backgroundColor: '#3c80f6' } : {}}
+                  className={`
+                    px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ease-in-out shadow 
+                    focus:outline-none whitespace-nowrap 
+                    focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 
+                    ${
                     activeTab === countryCode
-                      ? "text-gray-900 dark:text-white" // Active text color
-                      : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-600/50"
+                      ? "text-white focus:ring-[#3c80f6]" // Active: white text, specific bg via style
+                      : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-blue-500" // Inactive: card styles
                   }`}
                 >
                   {getCategoryDisplayName(countryCode)}
