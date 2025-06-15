@@ -345,7 +345,7 @@ export default function DailyDigest() {
 
         {/* Country tabs */}
         {!loadingDigest && !digestError && availableCountries.length > 0 && (
-          <div className="mt-4 px-2 sm:px-0"> {/* Outer container for padding on small screens */}
+          <div className="mt-4 px-2 sm:px-0 flex justify-center"> {/* Centering the scrollable container */}
             <div className="flex overflow-x-auto space-x-3 py-2 whitespace-nowrap no-scrollbar">
               {availableCountries.map((countryCode) => (
                 <button
