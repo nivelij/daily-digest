@@ -345,26 +345,31 @@ export default function DailyDigest() {
 
         {/* Country tabs */}
         {!loadingDigest && !digestError && availableCountries.length > 0 && (
-          <div className="mt-4 px-2 sm:px-0 flex justify-center"> {/* Centering the scrollable container */}
-            <div className="flex overflow-x-auto space-x-3 py-2 whitespace-nowrap no-scrollbar">
-              {availableCountries.map((countryCode) => (
-                <button
-                  key={countryCode}
-                  onClick={() => setActiveTab(countryCode)}
-                  style={activeTab === countryCode ? { backgroundColor: '#3c80f6' } : {}}
-                  className={`
-                    px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ease-in-out shadow 
-                    focus:outline-none whitespace-nowrap 
-                    focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 
-                    ${
-                    activeTab === countryCode
-                      ? "text-white focus:ring-[#3c80f6]" // Active: white text, specific bg via style
-                      : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 focus:ring-blue-500" // Inactive: card styles
-                  }`}
-                >
-                  {getCategoryDisplayName(countryCode)}
-                </button>
-              ))}
+          // This outer div uses negative margins on mobile to counteract the header's padding,
+          // making its content area effectively full-width. sm:mx-0 resets this for larger screens.
+          <div className="mt-4 -mx-4 sm:mx-0">
+            {/* This div centers the scrollable tab list if it doesn't overflow. */}
+            <div className="flex justify-center">
+              {/* The scrollable container. No horizontal padding on mobile, allowing tabs to scroll edge-to-edge. */}
+              <div className="flex overflow-x-auto space-x-2 px-4 py-2 whitespace-nowrap no-scrollbar"> {/* Added px-4 for padding inside scrollable area */}
+                {availableCountries.map((countryCode) => (
+                  <button
+                    key={countryCode}
+                    onClick={() => setActiveTab(countryCode)}
+                    style={activeTab === countryCode ? { backgroundColor: '#3c80f6' } : {}}
+                    className={`
+                      px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ease-in-out shadow {/* Changed font-medium to font-semibold */}
+                      focus:outline-none whitespace-nowrap
+                      ${
+                      activeTab === countryCode
+                        ? "text-white" // Active: white text, specific bg via style.
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600" // Inactive: card styles.
+                    }`}
+                  >
+                    {getCategoryDisplayName(countryCode)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
