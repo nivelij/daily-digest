@@ -14,6 +14,8 @@ interface Article {
 type ArticlesByCountry = Record<string, Article[]>;
 type DigestDataType = [ArticlesByCountry[]];
 
+const SWIPE_THRESHOLD = 50; // Minimum pixels for a swipe to be registered
+
 export default function DailyDigest() {
   // State for available dates
   const [availableDates, setAvailableDates] = useState<string[]>([])
@@ -29,6 +31,9 @@ export default function DailyDigest() {
   const [currentDate, setCurrentDate] = useState<Date | null>(null)
   const [activeTab, setActiveTab] = useState("ID")
   const [digestCache, setDigestCache] = useState<Record<string, DigestDataType>>({});
+
+  // Ref for swipe gesture
+  const touchstartXRef = useRef<number>(0);
 
   // Get date in YYYY-MM-DD format from a UTC Date object
   const formatDateForAPI = (date: Date) => {
@@ -268,6 +273,36 @@ export default function DailyDigest() {
   const availableCountries = getAvailableCountries()
   const currentArticles: Article[] = getArticlesForCountry(activeTab)
 
+  // Swipe navigation handlers
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLElement>) => {
+    // Only process single touches
+    if (event.touches.length === 1) {
+      touchstartXRef.current = event.touches[0].clientX;
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback((event: React.TouchEvent<HTMLElement>) => {
+    // Only process single touches
+    if (event.changedTouches.length === 1) {
+      const touchendX = event.changedTouches[0].clientX;
+      const deltaX = touchendX - touchstartXRef.current;
+
+      if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
+        const currentIndex = availableCountries.indexOf(activeTab);
+        if (currentIndex === -1 || availableCountries.length <= 1) return; // Active tab not found or not enough tabs
+
+        if (deltaX > 0) { // Swipe Right (finger moved from Left to Right) -> Go to Previous Tab
+          if (currentIndex > 0) {
+            setActiveTab(availableCountries[currentIndex - 1]);
+          }
+        } else { // Swipe Left (finger moved from Right to Left) -> Go to Next Tab
+          if (currentIndex < availableCountries.length - 1) {
+            setActiveTab(availableCountries[currentIndex + 1]);
+          }
+        }
+      }
+    }
+  }, [availableCountries, activeTab, setActiveTab]);
 
   if (loadingDates) {
     return (
@@ -375,7 +410,11 @@ export default function DailyDigest() {
         )}
       </header>
 
-      <main className="container mx-auto px-4 py-6 max-w-md">
+      <main
+        className="container mx-auto px-4 py-6 max-w-md"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         {/* Loading state */}
         {loadingDigest && (
           <div className="flex flex-col items-center justify-center py-12">
