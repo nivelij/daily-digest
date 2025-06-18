@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, FileText } from "lucide-react"
 
 const AVAILABLE_DATES_ENDPOINT = `${process.env.NEXT_PUBLIC_BACKEND_ENDPOINT_URL}/dates`;
@@ -31,6 +32,13 @@ export default function DailyDigest() {
   const [currentDate, setCurrentDate] = useState<Date | null>(null)
   const [activeTab, setActiveTab] = useState("ID")
   const [digestCache, setDigestCache] = useState<Record<string, DigestDataType>>({});
+  
+  // State for swipe/tab change animation direction
+  const [direction, setDirection] = useState(0); // 0: none, 1: next (content from right), -1: prev (content from left)
+
+  // Refs for tab indicator animation
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // const [tabIndicatorStyles, setTabIndicatorStyles] = useState({ x: 0, width: 0, opacity: 0 }); // Removed: No longer using sliding indicator
 
   // Ref for swipe gesture
   const touchstartXRef = useRef<number>(0);
@@ -244,6 +252,20 @@ export default function DailyDigest() {
     fetchAvailableDates();
   }, [fetchAvailableDates]);
 
+  // Effect to manage tabRefs array size when availableCountries changes
+  useEffect(() => {
+    const countries = getAvailableCountries(); // Depends on `digest`
+    tabRefs.current = tabRefs.current.slice(0, countries.length);
+  }, [digest]); // Re-run when digest changes, as getAvailableCountries depends on it
+
+  // Helper function to change tab and set animation direction
+  const changeTab = useCallback((newTabCode: string) => {
+    const currentIdx = getAvailableCountries().indexOf(activeTab);
+    const newIdx = getAvailableCountries().indexOf(newTabCode);
+    if (newIdx === -1 || newIdx === currentIdx) return;
+    setDirection(newIdx > currentIdx ? 1 : -1);
+    setActiveTab(newTabCode);
+  }, [activeTab, digest, setActiveTab]); // digest because getAvailableCountries depends on it
   // Fetch digest when current date changes (and is not null)
   useEffect(() => {
     if (currentDate) {
@@ -261,17 +283,32 @@ export default function DailyDigest() {
     const countries = getAvailableCountries(); // Depends on `digest`
     if (countries.length > 0) {
       if (!activeTab || !countries.includes(activeTab)) {
-        setActiveTab(countries[0]);
+        // For programmatic changes like this (e.g. initial load or data change),
+        // set direction to 0 to avoid unintended slide animation from previous state.
+        // Or, if you want it to animate from a default direction:
+        // setDirection(1); // or -1, or based on old vs new if old activeTab existed
+        setDirection(0); // No specific swipe direction for this reset
+        setActiveTab(countries[0]); // This will trigger the content animation if direction is non-zero
       }
     } else {
       if (activeTab) { // If there was an active tab from a previous digest
         setActiveTab(""); // Clear activeTab if no countries are available
       }
     }
-  }, [digest, activeTab]);
+  }, [digest, activeTab, setActiveTab]); // Added setActiveTab
+
+  // Effect for scrolling active tab into view
+  useEffect(() => {
+    const countries = getAvailableCountries();
+    const activeIndex = countries.indexOf(activeTab);
+    const activeTabElement = tabRefs.current[activeIndex];
+
+    if (activeTabElement) {
+      activeTabElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [activeTab, digest]); // digest because getAvailableCountries depends on it
 
   const availableCountries = getAvailableCountries()
-  const currentArticles: Article[] = getArticlesForCountry(activeTab)
 
   // Swipe navigation handlers
   const handleTouchStart = useCallback((event: React.TouchEvent<HTMLElement>) => {
@@ -291,18 +328,29 @@ export default function DailyDigest() {
         const currentIndex = availableCountries.indexOf(activeTab);
         if (currentIndex === -1 || availableCountries.length <= 1) return; // Active tab not found or not enough tabs
 
+        let newIndexToNavigate;
         if (deltaX > 0) { // Swipe Right (finger moved from Left to Right) -> Go to Previous Tab
           if (currentIndex > 0) {
-            setActiveTab(availableCountries[currentIndex - 1]);
+            newIndexToNavigate = currentIndex - 1;
           }
         } else { // Swipe Left (finger moved from Right to Left) -> Go to Next Tab
           if (currentIndex < availableCountries.length - 1) {
-            setActiveTab(availableCountries[currentIndex + 1]);
+            newIndexToNavigate = currentIndex + 1;
           }
+        }
+        if (newIndexToNavigate !== undefined) {
+          changeTab(availableCountries[newIndexToNavigate]);
         }
       }
     }
-  }, [availableCountries, activeTab, setActiveTab]);
+  }, [availableCountries, activeTab, changeTab, SWIPE_THRESHOLD]); // Use changeTab
+
+  const contentVariants = {
+    initial: (direction: number) => ({ x: direction > 0 ? "100%" : "-100%", opacity: 0, position: 'absolute' as 'absolute', width: '100%' }),
+    animate: { x: 0, opacity: 1, position: 'relative' as 'relative', transition: { duration: 0.4, ease: [0.4, 0, 0.2, 1] as const } },
+    exit: (direction: number) => ({ x: direction < 0 ? "100%" : "-100%", opacity: 0, position: 'absolute' as 'absolute', width: '100%', transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] as const } }),
+  };
+
 
   if (loadingDates) {
     return (
@@ -385,20 +433,20 @@ export default function DailyDigest() {
           <div className="mt-4 -mx-4 sm:mx-0">
             {/* This div centers the scrollable tab list if it doesn't overflow. */}
             <div className="flex justify-center">
-              {/* The scrollable container. No horizontal padding on mobile, allowing tabs to scroll edge-to-edge. */}
-              <div className="flex overflow-x-auto space-x-2 px-4 py-2 whitespace-nowrap no-scrollbar"> {/* Added px-4 for padding inside scrollable area */}
-                {availableCountries.map((countryCode) => (
+              {/* The scrollable container. space-x-2 provides gap between cards. px-4 for padding inside scrollable area */}
+              <div className="flex overflow-x-auto space-x-2 px-4 py-2 whitespace-nowrap no-scrollbar">
+                {availableCountries.map((countryCode, index) => (
                   <button
                     key={countryCode}
-                    onClick={() => setActiveTab(countryCode)}
-                    style={activeTab === countryCode ? { backgroundColor: '#3c80f6' } : {}}
+                    ref={(el) => { tabRefs.current[index] = el; }}
+                    onClick={() => changeTab(countryCode)}
                     className={`
-                      px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ease-in-out shadow {/* Changed font-medium to font-semibold */}
-                      focus:outline-none whitespace-nowrap
+                      px-4 py-2 rounded-lg text-sm transition-all duration-200 ease-in-out shadow /* Base card styles */
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 dark:focus-visible:ring-offset-gray-800 whitespace-nowrap /* Accessibility focus */
                       ${
                       activeTab === countryCode
-                        ? "text-white" // Active: white text, specific bg via style.
-                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600" // Inactive: card styles.
+                        ? "bg-blue-600 dark:bg-blue-500 text-white font-semibold shadow-lg" // Active card: distinct bg, white text, bolder font, stronger shadow
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600" // Inactive card: standard card appearance
                     }`}
                   >
                     {getCategoryDisplayName(countryCode)}
@@ -411,7 +459,7 @@ export default function DailyDigest() {
       </header>
 
       <main
-        className="container mx-auto px-4 py-6 max-w-md"
+        className="container mx-auto px-0 sm:px-4 py-6 max-w-md" // Adjusted px for potential full-width feel of sliding content
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -452,44 +500,58 @@ export default function DailyDigest() {
 
         {/* Content - Tab view */}
         {!loadingDigest && !digestError && digest && availableCountries.length > 0 && (
-          <div className="space-y-4">
-            {currentArticles && currentArticles.length > 0 ? (
-              currentArticles.map((item, itemIndex) => (
-                <div
-                  key={itemIndex}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow"
-                >
-                  <h3 className="font-semibold text-gray-800 dark:text-white mb-2">{item.subject}</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">{item.summary}</p>
+          <div className="relative overflow-hidden min-h-[300px]"> {/* Container for animation, ensure min-height */}
+            <AnimatePresence initial={false} custom={direction}>
+              <motion.div
+                key={activeTab} // Crucial for AnimatePresence to detect changes
+                custom={direction}
+                variants={contentVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="px-4" // Add padding here if removed from main for full-width slide illusion
+              >
+                <div className="space-y-4">
+                  {getArticlesForCountry(activeTab) && getArticlesForCountry(activeTab).length > 0 ? (
+                    getArticlesForCountry(activeTab).map((item, itemIndex) => (
+                      <div
+                        key={itemIndex}
+                        className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow"
+                      >
+                        <h3 className="font-semibold text-gray-800 dark:text-white mb-2">{item.subject}</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">{item.summary}</p>
 
-                  {item.links && item.links.length > 0 && (
-                    <div className="mt-2">
-                      <div className="flex flex-wrap gap-3">
-                        {item.links.map((link: string, linkIndex: number) => (
-                          <a
-                            key={linkIndex}
-                            href={link} // link is now guaranteed to be a string
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                          > 
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            Source {linkIndex + 1}
-                          </a>
-                        ))} 
+                        {item.links && item.links.length > 0 && (
+                          <div className="mt-2">
+                            <div className="flex flex-wrap gap-3">
+                              {item.links.map((link: string, linkIndex: number) => (
+                                <a
+                                  key={linkIndex}
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Source {linkIndex + 1}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 px-4"> {/* Ensure padding for centered text */}
+                      <FileText className="h-12 w-12 mx-auto text-gray-400" />
+                      <p className="mt-4 text-gray-600 dark:text-gray-400">
+                        No articles available for {getCategoryDisplayName(activeTab)} on this date.
+                      </p>
                     </div>
                   )}
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-12">
-                <FileText className="h-12 w-12 mx-auto text-gray-400" />
-                <p className="mt-4 text-gray-600 dark:text-gray-400">
-                  No articles available for {getCategoryDisplayName(activeTab)} on this date.
-                </p>
-              </div>
-            )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         )}
 
